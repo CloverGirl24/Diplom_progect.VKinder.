@@ -1,0 +1,126 @@
+import vk_api
+from vk_api.longpoll import VkLongPoll, VkEventType
+from vkinder import Vkinder
+from random import randrange
+from database import session,DatingUser
+from tokens import bot_token
+
+
+# Работа с VK_API
+vk = vk_api.VkApi(token=bot_token)
+longpoll = VkLongPoll(vk)
+# Работа с базой данных
+sess = session()
+
+def write_msg(user_id, message):
+    vk.method('messages.send', {'user_id': user_id, 'message': message, 'random_id': randrange(10 ** 7)})
+
+
+def send_photo(user_id, message, attachments):
+    vk.method('messages.send', {'user_id': user_id, 'message': message, 'attachment': ','.join(attachments),
+                                'random_id': randrange(10 ** 7), })
+
+
+
+
+if __name__ == '__main__':
+    for event in longpoll.listen():
+        if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+            request = event.text.lower()
+
+            if request == 'привет':
+                write_msg(event.user_id, 'Привет! Будем искать тебе пару?')
+                for event in longpoll.listen():
+                    if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+                        request = event.text.lower()
+
+                        if request == 'нет':
+                            write_msg(event.user_id, 'Когда передумаешь, просто напиши мне "Привет"')
+                            break
+                        elif request != 'нет' and request != 'да':
+                            write_msg(event.user_id, 'Напиши мне просто "Да" или "Нет"')
+                        elif request == 'да':
+                            write_msg(event.user_id,
+                                      'Выбери кого будем искать:\n1 - женщина;\n2 - мужчина.')
+
+                            for event in longpoll.listen():
+                                if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+                                    request = event.text.lower()
+                                    sex = int(request)
+
+                                    if int(request) > 2:
+                                        write_msg(event.user_id, 'Неверная цифра')
+                                    else:
+                                        write_msg(
+                                            event.user_id,
+                                                  'Выбери семейное положение кандидата:\n1 - не женат(не замужем);'
+                                                  '\n2 - всё сложно;\n3 - в активном поиске.'
+
+                                        )
+
+                                        for event in longpoll.listen():
+                                            if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+                                                request = event.text.lower()
+                                                status = int(request)
+
+                                                if int(request) > 3:
+                                                    write_msg(event.user_id, 'Неверная цифра')
+                                                else:
+                                                    write_msg(event.user_id, 'Какой минимальный возраст твоего кандидата?')
+
+                                                    for event in longpoll.listen():
+                                                        if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+                                                            request = event.text.lower()
+                                                            age_from = int(request)
+
+                                                            if int(request) < 0:
+                                                                write_msg(event.user_id, 'Неверная цифра')
+                                                            else:
+                                                                write_msg(event.user_id,
+                                                                          'Какой максимальный возраст твоего кандидата?')
+
+                                                            for event in longpoll.listen():
+                                                                if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+                                                                    request = event.text.lower()
+                                                                    age_to = int(request)
+
+                                                                    if int(request) < 0:
+                                                                        write_msg(event.user_id,
+                                                                                  'Неверная цифра')
+                                                                    else:
+                                                                        write_msg(event.user_id, 'Всё готово, сейчас скину тебе кандидатов!')
+                                                                        vk_client = Vkinder(bot_token, '5.131')
+                                                                        get_user_info = vk_client.get_user_info(
+                                                                            event.user_id)
+                                                                        users_search = vk_client.users_search(
+                                                                            get_user_info, sex, status, age_from,
+                                                                            age_to)
+                                                                        # Цикл отправлеят фото и id-кандидата
+                                                                        candidates_list = []
+                                                                        while True:
+                                                                            for candidate_id in users_search:
+                                                                                get_photos = vk_client.get_photos(candidate_id)
+                                                                                get_attachments = vk_client.messages_send(get_photos, candidate_id)
+                                                                                send_photo(event.user_id,
+                                                                                           f'Кандидат vk.com/id{candidate_id}',
+                                                                                           get_attachments)
+                                                                                candidates_data = DatingUser(name=f'vk.com/id{candidate_id}')
+                                                                                sess.add(candidates_data)
+                                                                                sess.commit()
+                                                                                add_result = sess.query(DatingUser).all()
+                                                                                for item in add_result:
+                                                                                    name = item.name
+                                                                                    candidates_list.append(name)
+                                                                                write_msg(event.user_id,'Продолжаем искать?')
+                                                                                for event in longpoll.listen():
+                                                                                    if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+                                                                                        request = event.text.lower()
+                                                                                        if request == 'да':
+                                                                                            break
+                                                                                        else:
+                                                                                            write_msg(
+                                                                                                event.user_id,
+                                                                                                f'Поиск закончен. '
+                                                                                                f'Вот список найденных кандидатов:{candidates_list}'
+                                                                                            )
+                                                                            break
