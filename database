@@ -1,0 +1,20 @@
+import sqlalchemy as sq
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+DSN = 'postgresql://postgres:LuckyGirl24@localhost:5432/Diplom'
+Base = declarative_base()
+
+engine = sq.create_engine(DSN)
+connect = engine.connect()
+session = sessionmaker(bind=engine)
+
+
+class DatingUser(Base):
+    __tablename__ = 'dating_user'
+
+    id = sq.Column(sq.Integer, primary_key=True)
+    name = sq.Column(sq.String(30))
+
+
+Base.metadata.create_all(engine)
